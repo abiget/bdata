@@ -1,0 +1,100 @@
+services:
+  # application service
+  app:
+    build: ./dashboard
+    container_name: price-intelligence-app
+    ports:
+      - ${STREAMLIT_PORT}:8501 # Map host port to container port
+    depends_on:
+      - broker 
+    networks:
+      - common-network
+    volumes:
+      - ./dashboard/app:/app # Mount application code
+
+    environment:
+      APP_ENV: ${APP_ENV} 
+      DEBUG: ${DEBUG}
+      STREAMLIT_HOST: ${STREAMLIT_HOST}
+      STREAMLIT_PORT: ${STREAMLIT_PORT}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+    healthcheck:
+      test: curl --fail http://localhost:8501 || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Kafka broker service
+  broker:
+    image: apache/kafka:latest
+    hostname: broker
+    container_name: kafka-broker
+    ports:
+      - 9092:9092 # External port for host machine access
+    environment:
+      # Basic Kafka configuration
+      KAFKA_BROKER_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: ${KAFKA_SECURITY_PROTOCOL}:${KAFKA_SECURITY_PROTOCOL},PLAINTEXT_HOST:${KAFKA_SECURITY_PROTOCOL},CONTROLLER:${KAFKA_SECURITY_PROTOCOL}
+      KAFKA_ADVERTISED_LISTENERS: ${KAFKA_SECURITY_PROTOCOL}://broker:29092,PLAINTEXT_HOST://localhost:9092
+
+      # KRaft mode configuration
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_NODE_ID: 1
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@broker:29093
+      KAFKA_LISTENERS: ${KAFKA_SECURITY_PROTOCOL}://broker:29092,CONTROLLER://broker:29093,PLAINTEXT_HOST://0.0.0.0:9092 # cross network
+      KAFKA_INTER_BROKER_LISTENER_NAME: ${KAFKA_SECURITY_PROTOCOL}
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      # Performance and replication settings
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+      # Storage configuration
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+
+    volumes:
+      - kafka-data:/var/lib/kafka/data # Persist Kafka data
+    networks:
+      - common-network
+    healthcheck:
+      test: [ "CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1" ]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
+
+
+# Optional: Kafka UI for monitoring
+  kafka-ui:
+    image: kafbat/kafka-ui:main
+    ports:
+      - ${KAFKA_UI_PORT}:8080  # Web UI port
+    environment:
+      DYNAMIC_CONFIG_ENABLED: "true"
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      KAFKA_CLUSTERS_0_METRICS_PORT: 9092
+      KAFKA_CLUSTERS_0_READONLY: "false"
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: PLAINTEXT
+    depends_on:
+      broker:
+        condition: service_healthy  # Wait for broker to be healthy
+    networks:
+      - common-network
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8080/ || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+# Networks
+networks:
+  common-network:
+  
+# Volumes
+volumes:
+  kafka-data:

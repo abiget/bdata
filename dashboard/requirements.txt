@@ -1,0 +1,14 @@
+
+# Kafka
+confluent-kafka
+
+# Dashboard
+streamlit
+pandas
+plotly
+python-dotenv
+
+
+# Database
+# sqlalchemy
+# psycopg2-binary
