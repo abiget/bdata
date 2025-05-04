@@ -6,7 +6,10 @@ services:
     ports:
       - ${STREAMLIT_PORT}:8501 # Map host port to container port
     depends_on:
-      - broker 
+      postgres:
+        condition: service_healthy
+      broker:
+        condition: service_healthy
     networks:
       - common-network
     volumes:
@@ -14,15 +17,47 @@ services:
 
     environment:
       APP_ENV: ${APP_ENV} 
-      DEBUG: ${DEBUG}
-      STREAMLIT_HOST: ${STREAMLIT_HOST}
-      STREAMLIT_PORT: ${STREAMLIT_PORT}
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_URI: ${POSTGRES_URI}
     healthcheck:
       test: curl --fail http://localhost:8501 || exit 1
       interval: 10s
       timeout: 5s
       retries: 3
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:latest
+    container_name: postgres-db
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST_AUTH_METHOD: trust # Allow connections without password for local development
+      POSTGRES_PORT: 5432  # Specify the port for PostgreSQL
+    volumes:
+      - type: tmpfs # Use tmpfs for /dev/shm for better performance from in memory operations like caching
+        target: /dev/shm
+        tmpfs:
+          size: 268435456  # 256 MB
+
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql # Initialize database with SQL script and postgres will run it
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - common-network
 
   # Kafka broker service
   broker:
