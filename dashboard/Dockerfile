@@ -16,5 +16,7 @@ COPY ./app .
 # Expose the port the app runs on
 EXPOSE 8501
 
+ENV POSTGRES_HOST="postgres-db"
+
 # Default command
 CMD ["streamlit", "run", "app.py"]

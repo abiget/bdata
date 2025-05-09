@@ -1,0 +1,26 @@
+# Python-related
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Git
+.git/
+.gitignore
+
+# Docker files
+Dockerfile
+.dockerignore
+
+# Logs and temp
+*.log
+*.tmp
+
+# Virtual environments
+venv/
+.env/
+
+# OS/IDE files
+.DS_Store
+.idea/
+.vscode/
