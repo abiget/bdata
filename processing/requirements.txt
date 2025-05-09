@@ -1,0 +1,10 @@
+confluent-kafka
+pandas
+numpy
+psycopg2-binary    # for PostgreSQL access from Python (if needed)
+pymongo             # for MongoDB access from Python (if needed)
+sqlalchemy          # for SQLAlchemy ORM (if needed)
+requests            # for making HTTP requests (if needed)
+# Update requirements.txt
+apache-flink==1.17.0  # Base Flink package
+
