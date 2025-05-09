@@ -1,3 +1,12 @@
+x-common-env: &common-env
+  KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+  POSTGRES_DB:        ${POSTGRES_DB}
+  POSTGRES_USER:      ${POSTGRES_USER}
+  POSTGRES_PASSWORD:  ${POSTGRES_PASSWORD}
+  POSTGRES_PORT:      ${POSTGRES_PORT}
+  POSTGRES_URL:       ${POSTGRES_URL}
+  POSTGRES_HOST:      ${POSTGRES_HOST}
+
 services:
   # application service
   app:
@@ -16,19 +25,48 @@ services:
       - ./dashboard/app:/app # Mount application code
 
     environment:
-      APP_ENV: ${APP_ENV} 
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_HOST: ${POSTGRES_HOST}
-      POSTGRES_PORT: ${POSTGRES_PORT}
-      POSTGRES_URI: ${POSTGRES_URI}
+      APP_ENV: ${APP_ENV}
+      <<: *common-env
     healthcheck:
       test: curl --fail http://localhost:8501 || exit 1
       interval: 10s
       timeout: 5s
       retries: 3
+  # ----------------------Clean----------------------  
+  competitor_price_producer:
+    build:
+      context: ./data_gen
+      dockerfile: src/producers/Dockerfile
+    container_name: competitor_price_producer
+    command: ["python3", "-u", "src/producers/competitor_price_producer.py"]
+    depends_on:
+      broker:
+        condition: service_healthy
+    networks:
+      - common-network
+    # volumes:
+    #   - ./data_gen/src/producers:/data_gen/producers 
+    #   - ./data_gen/src/common:/data_gen/common 
+    #   - ./data_gen/src/data:/data_gen/data 
+    environment:
+      <<: *common-env
+  user_behavior_producer:
+    build:
+      context: ./data_gen
+      dockerfile: src/producers/Dockerfile
+    container_name: user_behavior_producer
+    command: ["python3", "-u", "src/producers/user_behavior_producer.py"]
+    depends_on:
+      broker:
+        condition: service_healthy
+    networks:
+      - common-network
+    # volumes:
+    #   - ./data_gen:/user_behaviour # Mount application code
+
+    environment:
+      <<: *common-env
+  # ----------------Clean----------------------
 
   # PostgreSQL database
   postgres:
@@ -125,6 +163,93 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+# -----------------------------------------------------------------------------------------
+  sql-client:
+    build: ./processing
+    container_name: sql-client
+    command: bin/sql-client.sh
+    depends_on:
+      - jobmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        rest.address: jobmanager
+    networks:
+      - common-network
+
+  jobmanager:
+    build: ./processing
+    container_name: jobmanager
+    ports:
+      - "8081:8081"
+    command: standalone-job --python /opt/flink/processing/src/jobs/price_analyzer.py
+    volumes:
+      - ./processing:/opt/flink/processing
+      - flink_data:/tmp/
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        state.backend: filesystem
+        state.checkpoints.dir: file:///tmp/flink-checkpoints
+        heartbeat.interval: 1000
+        heartbeat.timeout: 5000
+        rest.flamegraph.enabled: true
+        web.backpressure.refresh-interval: 10000
+        execution.shutdown-on-application-finish: false
+    networks:
+      - common-network
+  taskmanager:
+    build: ./processing
+    container_name: taskmanager
+
+    command: taskmanager
+    volumes:
+      - flink_data:/tmp/
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 3
+        state.backend: filesystem
+        state.checkpoints.dir: file:///tmp/flink-checkpoints
+        heartbeat.interval: 1000
+        heartbeat.timeout: 5000
+    networks:
+      - common-network
+
+  # price_consumer:
+  #   build:
+  #     context: ./data_gen
+  #     dockerfile: Dockerfile
+  #   command: ["python3", "-u", "consumers/price_consumer.py"]
+  #   container_name: price_consumer
+  #   environment:
+  #     PRODUCER_SCRIPT: consumers/price_consumer.py
+  #   depends_on:
+  #     - broker
+  #     - postgres
+  #   networks:
+  #     - common-network
+
+  # price_analyzer:
+  #   build:
+  #     context: ./processing
+  #     dockerfile: Dockerfile
+  #   container_name: price_analyzer
+  #   environment:
+  #     - KAFKA_BOOTSTRAP_SERVERS=broker:29092
+  #   depends_on:
+  #     - broker
+  #     - postgres
+  #     - jobmanager
+  #     - taskmanager
+  #     - competitor_price_producer
+  #     - user_behavior_producer
+  #   networks:
+  #     - common-network
+# -----------------------------------------------------------------------------------------
 
 # Networks
 networks:
@@ -133,3 +258,6 @@ networks:
 # Volumes
 volumes:
   kafka-data:
+  postgres_data:
+  flink-checkpoints:
+  flink_data:
