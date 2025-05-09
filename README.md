@@ -17,3 +17,20 @@ bash run.sh build && bash run.sh start
 - https://www.kaggle.com/datasets/saibattula/retail-price-dataset-sales-data
 
 - https://www.kaggle.com/datasets/lokeshparab/amazon-products-dataset/data
+
+<!-- create topic -->
+docker exec kafka-broker /opt/kafka/bin/kafka-topics.sh \
+    --create \
+    --topic price_updates_topic \
+    --bootstrap-server localhost:9092 \
+    --partitions 1 \
+    --replication-factor 1
+    
+<!-- list topics -->
+docker exec kafka-broker /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092
+
+<!-- Monitor the output topic -->
+docker exec kafka-broker opt/kafka/bin/kafka-console-consumer.sh \
+    --bootstrap-server localhost:9092 \
+    --topic price_updates_topic \
+    --from-beginning
